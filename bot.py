@@ -3,6 +3,8 @@ from discord.ext import commands
 from discord import app_commands
 import os
 import asyncio
+from aiohttp import web
+import threading
 
 intents = discord.Intents.default()
 intents.guilds = True
@@ -39,8 +41,8 @@ Para começar, quem adicionou o bot deve seguir os passos:
 4. Use /bidstart para liberar o funcionamento do bot.
 
 Depois disso, os membros com permissão poderão usar:
-- /bid VALOR para registrar seus lances com o personagem principal
-- /bidalt VALOR CLAN para registrar bids com personagem alt (ex: /bidalt 5M Omega)
+- /bid VALOR para registrar seu bid principal
+- /bidalt VALOR CLAN para registrar um bid com personagem alternativo
 
 Admins também poderão usar:
 - /bidtotal para ver o total acumulado
@@ -51,7 +53,6 @@ Admins também poderão usar:
             )
             break
 
-# Comando: /bidadm
 @client.tree.command(name="bidadm")
 @app_commands.describe(role="Mencione o cargo que será o administrador do bot")
 async def bidadm(interaction: discord.Interaction, role: discord.Role):
@@ -59,7 +60,6 @@ async def bidadm(interaction: discord.Interaction, role: discord.Role):
     _get_config(interaction.guild_id)["admin_role"] = role.id
     await interaction.response.send_message(f"Cargo admin definido com sucesso: {role.mention}")
 
-# Comando: /bidmember
 @client.tree.command(name="bidmember")
 @app_commands.describe(role="Mencione o cargo que poderá usar o comando /bid")
 async def bidmember(interaction: discord.Interaction, role: discord.Role):
@@ -67,7 +67,6 @@ async def bidmember(interaction: discord.Interaction, role: discord.Role):
     _get_config(interaction.guild_id)["member_role"] = role.id
     await interaction.response.send_message(f"Cargo de membros definido com sucesso: {role.mention}")
 
-# Comando: /bidchannel
 @client.tree.command(name="bidchannel")
 @app_commands.describe(channel="Canal onde os bids serão exibidos")
 async def bidchannel(interaction: discord.Interaction, channel: discord.TextChannel):
@@ -75,7 +74,6 @@ async def bidchannel(interaction: discord.Interaction, channel: discord.TextChan
     _get_config(interaction.guild_id)["channel_id"] = channel.id
     await interaction.response.send_message(f"Canal de operação definido com sucesso: {channel.mention}")
 
-# Comando: /bidstart
 @client.tree.command(name="bidstart")
 async def bidstart(interaction: discord.Interaction):
     _check_admin(interaction)
@@ -86,7 +84,6 @@ async def bidstart(interaction: discord.Interaction):
     config["started"] = True
     await interaction.response.send_message("Bot liberado com sucesso. Agora aceitando bids.")
 
-# Comando: /bid
 @client.tree.command(name="bid")
 @app_commands.describe(valor="Informe o valor do bid (ex: 10M)")
 async def bid(interaction: discord.Interaction, valor: str):
@@ -98,16 +95,16 @@ async def bid(interaction: discord.Interaction, valor: str):
         await interaction.response.send_message("Você não tem permissão para dar bid.", ephemeral=True)
         return
     if interaction.user.id in bids or interaction.user.id in alt_bids:
-        await interaction.response.send_message("Você já enviou um bid. Aguarde a próxima rodada.", ephemeral=True)
+        await interaction.response.send_message("Você já deu um bid. Aguarde o reset com /bidstop.", ephemeral=True)
         return
+
     bids[interaction.user.id] = valor
     canal = client.get_channel(config["channel_id"])
     await canal.send(f"{interaction.user.mention} - {valor}")
     await interaction.response.send_message("Seu bid foi registrado com sucesso.", ephemeral=True)
 
-# Comando: /bidalt
 @client.tree.command(name="bidalt")
-@app_commands.describe(valor="Informe o valor do bid (ex: 5M)", clan="Nome do clã com o qual está participando")
+@app_commands.describe(valor="Valor do bid (ex: 5M)", clan="Nome da clan onde o alt está")
 async def bidalt(interaction: discord.Interaction, valor: str, clan: str):
     config = _get_config(interaction.guild_id)
     if not config.get("started"):
@@ -117,28 +114,26 @@ async def bidalt(interaction: discord.Interaction, valor: str, clan: str):
         await interaction.response.send_message("Você não tem permissão para dar bid.", ephemeral=True)
         return
     if interaction.user.id in bids or interaction.user.id in alt_bids:
-        await interaction.response.send_message("Você já enviou um bid. Aguarde a próxima rodada.", ephemeral=True)
+        await interaction.response.send_message("Você já deu um bid. Aguarde o reset com /bidstop.", ephemeral=True)
         return
+
     alt_bids[interaction.user.id] = (valor, clan)
     canal = client.get_channel(config["channel_id"])
     await canal.send(f"{interaction.user.mention} - {valor} - ALT na {clan}")
-    await interaction.response.send_message("Seu bid (ALT) foi registrado com sucesso.", ephemeral=True)
+    await interaction.response.send_message("Seu bid alternativo foi registrado com sucesso.", ephemeral=True)
 
-# Comando: /bidtotal
 @client.tree.command(name="bidtotal")
 async def bidtotal(interaction: discord.Interaction):
     _check_admin(interaction)
     total = sum(_parse_valor(v) for v in bids.values()) + sum(_parse_valor(v[0]) for v in alt_bids.values())
     await interaction.response.send_message(f"Total em bids: {total:,.0f} gold")
 
-# Comando: /bidmembros
 @client.tree.command(name="bidmembros")
 async def bidmembros(interaction: discord.Interaction):
     _check_admin(interaction)
     nomes = [f"<@{uid}>" for uid in bids.keys()] + [f"<@{uid}> (ALT)" for uid in alt_bids.keys()]
     await interaction.response.send_message("Membros que deram bid:\n" + "\n".join(nomes))
 
-# Comando: /bidstop
 @client.tree.command(name="bidstop")
 async def bidstop(interaction: discord.Interaction):
     _check_admin(interaction)
@@ -146,7 +141,6 @@ async def bidstop(interaction: discord.Interaction):
     alt_bids.clear()
     await interaction.response.send_message("Todos os bids foram zerados com sucesso.")
 
-# Comando: /bidreset
 @client.tree.command(name="bidreset")
 async def bidreset(interaction: discord.Interaction):
     _check_admin(interaction)
@@ -155,7 +149,6 @@ async def bidreset(interaction: discord.Interaction):
     alt_bids.clear()
     await interaction.response.send_message("Todas as configurações e bids foram resetados com sucesso.")
 
-# Funções auxiliares
 def _get_config(guild_id):
     if guild_id not in guild_configs:
         guild_configs[guild_id] = {}
@@ -181,18 +174,23 @@ def _parse_valor(valor):
     except:
         return 0
 
-from aiohttp import web
-import threading
-
-async def handle(request):
-    return web.Response(text="Bot rodando.")
-
+# Web server para manter Render ativo
 def start_webserver():
     app = web.Application()
-    app.router.add_get('/', handle)
-    web.run_app(app, port=3000)
+    app.router.add_get('/', lambda request: web.Response(text="Bot rodando."))
+
+    runner = web.AppRunner(app)
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    async def run():
+        await runner.setup()
+        site = web.TCPSite(runner, '0.0.0.0', 3000)
+        await site.start()
+
+    loop.run_until_complete(run())
+    loop.run_forever()
 
 threading.Thread(target=start_webserver).start()
-
 
 client.run(os.environ['YOUR_BOT_TOKEN'])
