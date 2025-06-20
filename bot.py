@@ -94,8 +94,8 @@ async def bid(interaction: discord.Interaction, valor: str):
     if not _has_role(interaction.user, config.get("member_role")):
         await interaction.response.send_message("Você não tem permissão para dar bid.", ephemeral=True)
         return
-    if interaction.user.id in bids or interaction.user.id in alt_bids:
-        await interaction.response.send_message("Você já deu um bid. Aguarde o reset com /bidstop.", ephemeral=True)
+    if interaction.user.id in bids:
+        await interaction.response.send_message("Você já deu um bid principal. Aguarde o reset com /bidstop.", ephemeral=True)
         return
 
     bids[interaction.user.id] = valor
@@ -113,8 +113,8 @@ async def bidalt(interaction: discord.Interaction, valor: str, clan: str):
     if not _has_role(interaction.user, config.get("member_role")):
         await interaction.response.send_message("Você não tem permissão para dar bid.", ephemeral=True)
         return
-    if interaction.user.id in bids or interaction.user.id in alt_bids:
-        await interaction.response.send_message("Você já deu um bid. Aguarde o reset com /bidstop.", ephemeral=True)
+    if interaction.user.id in alt_bids:
+        await interaction.response.send_message("Você já deu um bid alternativo. Aguarde o reset com /bidstop.", ephemeral=True)
         return
 
     alt_bids[interaction.user.id] = (valor, clan)
