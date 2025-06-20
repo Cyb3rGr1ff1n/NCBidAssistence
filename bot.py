@@ -125,8 +125,18 @@ async def bidalt(interaction: discord.Interaction, valor: str, clan: str):
 @client.tree.command(name="bidtotal")
 async def bidtotal(interaction: discord.Interaction):
     _check_admin(interaction)
-    total = sum(_parse_valor(v) for v in bids.values()) + sum(_parse_valor(v[0]) for v in alt_bids.values())
-    await interaction.response.send_message(f"Total em bids: {total:,.0f} gold")
+    total_main = sum(_parse_valor(v) for v in bids.values())
+
+    clan_totals = {}
+    for valor, clan in alt_bids.values():
+        clan_totals.setdefault(clan, 0)
+        clan_totals[clan] += _parse_valor(valor)
+
+    msg = f"Total em bids MAIN: {total_main:,.0f} gold\n"
+    for clan, total in clan_totals.items():
+        msg += f"Total em bids ALT [{clan}]: {total:,.0f} gold\n"
+
+    await interaction.response.send_message(msg)
 
 @client.tree.command(name="bidmembros")
 async def bidmembros(interaction: discord.Interaction):
