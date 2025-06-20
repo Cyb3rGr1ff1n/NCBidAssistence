@@ -56,8 +56,8 @@ Admins também poderão usar:
 @client.tree.command(name="bidadm")
 @app_commands.describe(role="Mencione o cargo que será o administrador do bot")
 async def bidadm(interaction: discord.Interaction, role: discord.Role):
-    _check_admin(interaction)
-    _get_config(interaction.guild_id)["admin_role"] = role.id
+    config = _get_config(interaction.guild_id)
+    config["admin_role"] = role.id
     await interaction.response.send_message(f"Cargo admin definido com sucesso: {role.mention}")
 
 @client.tree.command(name="bidmember")
