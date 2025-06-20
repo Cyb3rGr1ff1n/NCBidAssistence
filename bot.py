@@ -181,4 +181,18 @@ def _parse_valor(valor):
     except:
         return 0
 
+from aiohttp import web
+import threading
+
+async def handle(request):
+    return web.Response(text="Bot rodando.")
+
+def start_webserver():
+    app = web.Application()
+    app.router.add_get('/', handle)
+    web.run_app(app, port=3000)
+
+threading.Thread(target=start_webserver).start()
+
+
 client.run(os.environ['YOUR_BOT_TOKEN'])
